@@ -1,22 +1,30 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.1"
+__version__ = "2.2"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
+__contributors__ = ["Martin 'Joey' Schulze"]
 
 # TODO:
+#   Support decoded entities with unifiable.
 #	Word wrap. 
-#	Buffering for, e.g., rss2email (fixes :s too). 
+#	Fix :s using buffering
 #	Relative URl resolution
 
-import re, sys, urllib, htmlentitydefs, StringIO
+import re, sys, urllib, htmlentitydefs, codecs, StringIO, types
 import sgmllib
 sgmllib.charref = re.compile('&#([xX]?[0-9a-fA-F]+)[^0-9a-fA-F]')
+
+try: from textwrap import wrap
+except: pass
 
 # Use Unicode characters instead of their ascii psuedo-replacements
 UNICODE_SNOB = 0
 
 # Put the links after each paragraph instead of at the end.
 LINKS_EACH_PARAGRAPH = 0
+
+# Wrap long lines at position. 0 for no wrapping. (Requires Python 2.3.)
+BODY_WIDTH = 0
 
 ### Entity Nonsense ###
 
@@ -27,7 +35,7 @@ def name2cp(k):
 	else:
 		k = htmlentitydefs.entitydefs[k]
 		if k.startswith("&#") and k.endswith(";"): return int(k[2:-1]) # not in latin-1
-		return ord(k.decode('ISO-8859-1'))
+		return ord(codecs.latin_1_decode(k)[0])
 
 unifiable = {'rsquo':"'", 'lsquo':"'", 'rdquo':'"', 'ldquo':'"', 
 'copy':'(C)', 'mdash':'--', 'nbsp':' ', 'rarr':'->', 'larr':'<-', 'middot':'*',
@@ -82,12 +90,44 @@ def fixattrs(attrs):
 
 ### End Entity Nonsense ###
 
+def onlywhite(line):
+	"""Return true if the line does only consist of whitespace characters."""
+	for c in line:
+		if c is not ' ' and c is not '	':
+			return c is ' '
+	return line
+
+def optwrap(text):
+	"""Wrap all paragraphs in the provided text."""
+	if not BODY_WIDTH:
+		return text
+	
+	assert wrap # Requires Python 2.3.
+	result = ''
+	newlines = 0
+	for para in text.split("\n"):
+		if len(para) > 0:
+			if para[0] is not ' ' and para[0] is not '-' and para[0] is not '*':
+				for line in wrap(para, BODY_WIDTH):
+					result += line + "\n"
+				result += "\n"
+				newlines = 2
+			else:
+				if not onlywhite(para):
+					result += para + "\n"
+					newlines = 1
+		else:
+			if newlines < 2:
+				result += "\n"
+				newlines += 1
+	return result
+
 def hn(tag):
 	if tag[0] == 'h' and len(tag) == 2:
 		try:
 			n = int(tag[1])
 			if n in range(1, 10): return n
-		except ValueError: return False
+		except ValueError: return 0
 
 class _html2text(sgmllib.SGMLParser):
 	def __init__(self, out=sys.stdout.write):
@@ -111,7 +151,7 @@ class _html2text(sgmllib.SGMLParser):
 		self.lastWasNL = 0
 	
 	def outtextf(self, s): 
-		if type(s) is str: s = s.decode('utf8')
+		if type(s) is type(''): s = codecs.utf_8_decode(s)[0]
 		self.outtext += s
 	
 	def close(self):
@@ -133,6 +173,29 @@ class _html2text(sgmllib.SGMLParser):
 	
 	def unknown_endtag(self, tag):
 		self.handle_tag(tag, None, 0)
+		
+ 	def previousIndex(self, attrs):
+ 		""" returns the index of certain set of attributes (of a link) in the
+ 			self.a list
+ 
+ 			If the set of attributes is not found, returns None
+ 		"""
+ 		if not attrs.has_key('href'): return None
+ 		
+ 		i = -1
+ 		for a in self.a:
+ 			i += 1
+ 			match = 0
+ 			
+ 			if a.has_key('href') and a['href'] == attrs['href']:
+ 				if a.has_key('title') or attrs.has_key('title'):
+ 						if (a.has_key('title') and attrs.has_key('title') and
+ 						    a['title'] == attrs['title']):
+ 							match = True
+ 				else:
+ 					match = True
+
+ 			if match: return i
 
 	def handle_tag(self, tag, attrs, start):
 		attrs = fixattrs(attrs)
@@ -144,6 +207,11 @@ class _html2text(sgmllib.SGMLParser):
 		if tag in ['p', 'div']: self.p()
 		
 		if tag == "br" and start: self.o("  \n")
+
+		if tag == "hr" and start:
+			self.p()
+			self.o("* * *")
+			self.p()
 
 		if tag in ["head", "style", 'script']: 
 			if start: self.quiet += 1
@@ -163,7 +231,9 @@ class _html2text(sgmllib.SGMLParser):
 		
 		if tag == "a":
 			if start:
-				attrs = dict(attrs)
+				attrsD = {}
+				for (x, y) in attrs: attrsD[x] = y
+				attrs = attrsD
 				if attrs.has_key('href'): 
 					self.astack.append(attrs)
 					self.o("[")
@@ -173,23 +243,34 @@ class _html2text(sgmllib.SGMLParser):
 				if self.astack:
 					a = self.astack.pop()
 					if a:
-						self.acount += 1
-						a['count'] = self.acount
-						a['outcount'] = self.outcount
+						i = self.previousIndex(a)
+						if i is not None:
+							a = self.a[i]
+						else:
+							self.acount += 1
+							a['count'] = self.acount
+							a['outcount'] = self.outcount
+							self.a.append(a)
 						self.o("][" + `a['count']` + "]")
-						self.a.append(a)
 		
 		if tag == "img" and start:
-			self.acount += 1
-			attrs = dict(attrs)
+			attrsD = {}
+			for (x, y) in attrs: attrsD[x] = y
+			attrs = attrsD
 			if attrs.has_key('src'):
 				attrs['href'] = attrs['src']
-				attrs['count'] = self.acount
-				attrs['outcount'] = self.outcount
-				self.a.append(attrs)
+				alt = attrs.get('alt', '')
+				i = self.previousIndex(attrs)
+				if i is not None:
+					attrs = self.a[i]
+				else:
+					self.acount += 1
+					attrs['count'] = self.acount
+					attrs['outcount'] = self.outcount
+					self.a.append(attrs)
 				self.o("![")
-				if attrs.has_key('alt'): self.o(attrs['alt'])
-				self.o("]["+`self.acount`+"]")
+				self.o(alt)
+				self.o("]["+`attrs['count']`+"]")
 		
 		if tag in ["ol", "ul"]:
 			if start:
@@ -243,7 +324,7 @@ class _html2text(sgmllib.SGMLParser):
 				self.startpre = 0
 			
 			bq = (">" * self.blockquote)
-			if not (force and data and data[0] == ">"): bq += (" "*bool(self.blockquote))
+			if not (force and data and data[0] == ">") and self.blockquote: bq += " "
 			
 			if self.pre:
 				bq += "    "
@@ -302,7 +383,7 @@ def html2text_file(html, out=sys.stdout.write):
 	return h.close()
 
 def html2text(html):
-	return html2text_file(html, None)
+	return optwrap(html2text_file(html, None))
 
 if __name__ == "__main__":
 	if sys.argv[1:]:
