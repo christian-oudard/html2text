@@ -1,240 +1,302 @@
-#!/usr/bin/python2.2
-"""HTML2Text: Converts HTML to clean and readable plain text."""
+"""html2text: Turn HTML into equivalent Markdown-structured text."""
+__version__ = "2.0, alpha"
+__author__ = "Aaron Swartz (me@aaronsw.com)"
+__copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
 
-__author__ = "Aaron Swartz, based on code by Aaron Swartz and Lars Pind"
-__copyright__ = "(C) 2002 Aaron Swartz. GNU GPL 2"
+# TODO: Word wrap.
 
-import re, urlparse
-re_ftag = re.compile(r'(/?)([^\s]+)(.*)', re.I|re.M|re.S)
-re_href = re.compile(r'(href|src)\s*=\s*["\']([^"\']+)["\']', re.I|re.M|re.S)
-re_href2 = re.compile(r'(href|src)\s*=\s*([^ ]+)', re.I|re.M|re.S)
-re_title = re.compile(r'(title|alt)\s*=\s*["\']([^"\']+)["\']', re.I|re.M|re.S)
-re_title2 = re.compile(r'(title|alt)\s*=\s*([^ ]+)', re.I|re.M|re.S)
-re_comments = re.compile(r'<!--.*?-->', re.I|re.M|re.S)
+import re, sys, urllib, htmlentitydefs
+import sgmllib
+sgmllib.charref = re.compile('&#([xX]?[0-9a-fA-F]+)[^0-9a-fA-F]')
 
-def intEnt(m):
-	m = int(m.groups(1)[0])
-	return unichr(m).encode('utf-8')
+# Use Unicode characters instead of their ascii psuedo-replacements
+UNICODE_SNOB = 0
 
-def xEnt(m):
-	m = int(m.groups(1)[0], 16)
-	return unichr(m).encode('utf-8')
+# Put the links after each paragraph instead of at the end.
+LINKS_EACH_PARAGRAPH = 0
 
-def expandEntities(text):
-	text = text.replace("&lt;", "<")
-	text = text.replace("&gt;", ">")
-	text = text.replace("&quot;", '"')
-	text = text.replace("&ob;", "{")
-	text = text.replace("&cb;", "}")
-	text = text.replace("&middot;", "*")
-	text = re.sub("&[rl]squo;", "'", text)
-	text = re.sub("&[rl]dquo;", '"', text)
-	text = re.sub("&([aeiou])(grave|acute|circ|tilde|uml|ring);", lambda m: m.groups(1)[0], text)
-	text = re.sub(r'&#(\d+);', intEnt, text)
-	text = re.sub(r'&#[Xx](\w+);', xEnt, text)
-	text = re.sub("&(#169|copy);", "(C)", text)
-	text = re.sub("&mdash;", "--", text)
-	return text
+### Entity Nonsense ###
 
-class _html2text:
-	def __call__(self, html, basehref, maxlen=80, showtags=0, showlinks=1):
-		self.text, self.line, self.maxlen  = '', '', maxlen
-		self.pre, self.p, self.br, self.blockquote, self.space = 0, 0, 0, 0, 0
-		last_tag_end = 0
-		href_urls, href_stack = [], []
-		
-		# remove comments
-		html = re.sub(re_comments, "", html)
-		
-		i = html.find('<')
-		while i != -1:
-			self.output(html[last_tag_end:i])
-			# we're inside a tag, find the end
-			# make i point to the char after the <
-			tag_start = i + 1
-			in_quote = 0
-			for c in html[i:]:
-				i += 1
-				if c == ">" and not in_quote: break
-				if c == '"' and not in_quote: in_quote = 1
-				if c == '"' and in_quote: in_quote = 0
-			i -= 1
-			full_tag = html[tag_start:i]
-			s = re.findall(re_ftag, full_tag)
-			if s:
-				s = s[0]
-				slash, tagname, attributes = s[0], s[1], s[2]
-				# valid tag
-				t = tagname.lower()
-				if t in ['p', 'ul', 'ol', 'table', 'div']:
-					self.p = 1
-				elif t == ["span", 'tbody']: pass
-				elif t == 'br':
-					self.text += self.line + '\n'
-					self.line = "    " * self.blockquote
-				elif t in ['tr', 'td', 'th']:
-					self.br = 1
-				elif t == "title":
-					if slash:
-						self.p = 1
-					else:
-						self.output("TITLE: ")
-				elif re.match(r'h\d+', t):
-					if not slash: self.p = 1
-					out = "=" * int(t[1:])
-					if slash:
-						out = ' ' + out
-					else:
-						out += ' '
-					self.output(out)
-					del out
-					if slash: self.p = 1
-				elif t == 'li':
-					self.br = 1
-					if not slash:
-						self.output(" -")
-						self.line += ' '
-				elif t in ['strong', 'b']:
-					self.output('*')
-				elif t in ['em', 'i', 'cite']:
-					self.output('_')
-				elif t == 'a' and showlinks:
-					if not slash:
-						href = re.findall(re_href, attributes) or re.findall(re_href2, attributes)
-						title = re.findall(re_title, attributes) or re.findall(re_title2, attributes)
-						if href:
-							href = href[0][1].replace("\n", "").replace("\r", "")
-							href_no = len(href_urls) + 1
-							if title: 
-								href_urls.append((href, expandEntities(title[0][1])))
-							else:
-								href_urls.append((href, ""))
-							href_stack.append("["+`href_no`+"]")
-						else:
-							href_stack.append("")
-					else:
-						if len(href_stack) > 0: 
-							if href_stack[-1]:
-								self.output(href_stack[-1])
-							href_stack.pop()
-				elif t == 'pre':
-					self.p = 1
-					if not slash:
-						self.pre += 1
-					else:
-						self.pre -= 1
-				elif t == 'blockquote':
-					self.p = 1
-					if not slash:
-						self.blockquote += 1
-					else:
-						self.blockquote -= 1
-				elif t == "hr":
-					self.p = 1
-					self.output("-" * maxlen)
-					self.p = 1
-				elif t == "img":
-					self.output("[IMG") 
-					href = re.findall(re_href, attributes) or re.findall(re_href2, attributes)
-					title = re.findall(re_title, attributes) or re.findall(re_title2, attributes)
-					if href:
-						href = urlparse.urljoin(basehref, href[0][1].replace("\n", "").replace("\r", ""))
-						self.output(": " + href)
-						if title: 
-							self.output(" ("+ expandEntities(title[0][1]) + ")")
-					self.output("]")
-				else:
-					if showtags:
-						self.output("&lt;"+slash+tagname+attributes+"&gt;")
-			# set end of last tag to the character following the >
-			last_tag_end = i + 1
-			i = html.find("<", i)
+def name2cp(k):
+	if k == 'apos': return ord("'")
+	if hasattr(htmlentitydefs, "name2codepoint"): # requires Python 2.3
+		return htmlentitydefs.name2codepoint[k]
+	else:
+		k = htmlentitydefs.entitydefs[k]
+		if k.startswith("&#") and k.endswith(";"): return int(k[2:-1]) # not in latin-1
+		return ord(k.decode('ISO-8859-1'))
+
+unifiable = {'rsquo':"'", 'lsquo':"'", 'rdquo':'"', 'ldquo':'"', 
+'copy':'(C)', 'mdash':'--', 'nbsp':' ', 'rarr':'->', 'larr':'<-', 'middot':'*',
+'oelig':'oe', 'aelig':'ae', 
+'agrave':'a', 'aacute':'a', 'acirc':'a', 'atilde':'a', 'auml':'a', 'aring':'a', 
+'egrave':'e', 'eacute':'e', 'ecirc':'e', 'euml':'e', 
+'igrave':'i', 'iacute':'i', 'icirc':'i', 'iuml':'i',
+'ograve':'o', 'oacute':'o', 'ocirc':'o', 'otilde':'o', 'ouml':'o', 
+'ugrave':'u', 'uacute':'u', 'ucirc':'u', 'uuml':'u'}
+
+unifiable_n = {}
+
+for k in unifiable.keys():
+	unifiable_n[name2cp(k)] = unifiable[k]
+
+def charref(name):
+	if name[0] in ['x','X']:
+		c = int(name[1:], 16)
+	else:
+		c = int(name)
 	
-		# append everything after the last tag
-		self.output(html[last_tag_end:])
-		
-		# close all pre tags
-		self.pre, self.blockquote = 0, 0
-		self.text += self.line + "\n"
-		
-		if showlinks:
-			i = 0
-			for u in href_urls:
-				i += 1
-				self.text += "\n[" + `i` + "]" + (' ' * (len(`len(href_urls)`) - len(`i`) + 1)) + \
-				  urlparse.urljoin(basehref, u[0])
-				if u[1]: 
-					 self.text += "\n   " + (' ' * len(`len(href_urls)`)) + u[1]
+	if not UNICODE_SNOB and c in unifiable_n.keys():
+		return unifiable_n[c]
+	else:
+		return unichr(c).encode('utf8')
 
-		self.text = self.text.replace("&nbsp;", " ")
-		self.text = self.text.replace("&amp;", "&")
-		return self.text
-			
-	def output(self, text):
-		text = expandEntities(text)
-		if self.line == '' and text.isspace(): return
+def entityref(c):
+	if not UNICODE_SNOB and c in unifiable.keys():
+		return unifiable[c]
+	else:
+		try: name2cp(c)
+		except KeyError: return "&" + c
+		else: return unichr(name2cp(c)).encode('utf8')
+
+def replaceEntities(s):
+	s = s.group(0)
+	if s[0] == "#": return charref(s[1:])
+	else: return entityref(s)
+
+r_unescape = re.compile(r"&(#?[xX]?(?:[0-9a-fA-F]+|\w{1,8}));")
+def unescape(s):
+	return r_unescape.sub(replaceEntities, s)
+	
+def fixattrs(attrs):
+	# Fix bug in sgmllib.py
+	if not attrs: return attrs
+	newattrs = []
+	for attr in attrs:
+		newattrs.append((attr[0], unescape(attr[1])))
+	return newattrs
+
+### End Entity Nonsense ###
+
+def out(text): sys.stdout.write(text)
+
+def hn(tag):
+	if tag[0] == 'h' and len(tag) == 2:
+		try:
+			n = int(tag[1])
+			if n in range(1, 10): return n
+		except ValueError: return False
+
+class _html2text(sgmllib.SGMLParser):
+	def __init__(self):
+		sgmllib.SGMLParser.__init__(self)
 		
-		# output the text:
-		if self.pre <= 0:
-			# we're not inside a PRE tag
-			text = re.sub("\s+", " ", text)
-			if text == ' ': self.space = 1; return
-			if self.space and self.line != "    " * self.blockquote: self.line += " "; self.space = 0			
-			i, l = 0, text.split(' ')
-			self.dumpbuffer()
-			for word in l:
-				word = re.sub("&(nsbp|#160);", " ", word)
-				if len(self.line) > 0:
-					if len(self.line) + 1 + len(word) > self.maxlen:
-						# the next word goes past our maxline, break here
-						self.text += self.line + '\n'
-						self.line = "    " * self.blockquote
-				self.line = self.line + word
-				if i != (len(l) - 1) and self.line != "    " * self.blockquote: self.line += " "
-				i += 1
-		else:
-			self.text += self.line
-			self.line = ''
-			self.dumpbuffer()
-			# we are inside a pre tag		
-			if self.blockquote:
-				# break up by lines and indent
-				for line in text.split('\n')[:-1]:
-					self.text += line + '\n' + ('    ' * self.blockquote)
-				self.text += text.split('\n')[-1] # last line, don't add a line break
+		self.quiet = 0
+		self.p_p = 0
+		self.outcount = 0
+		self.start = 1
+		self.space = 0
+		self.a = []
+		self.astack = []
+		self.acount = 0
+		self.list = []
+		self.blockquote = 0
+		self.pre = 0
+		self.startpre = 0
+		self.lastWasNL = 0
+	
+	def close(self):
+		sgmllib.SGMLParser.close(self)
+		
+		self.pbr()
+		self.o('', 0, 'end')
+		
+	def handle_charref(self, c):
+		self.o(charref(c))
+
+	def handle_entityref(self, c):
+		self.o(entityref(c))
+			
+	def unknown_starttag(self, tag, attrs):
+		self.handle_tag(tag, attrs, 1)
+	
+	def unknown_endtag(self, tag):
+		self.handle_tag(tag, None, 0)
+
+	def handle_tag(self, tag, attrs, start):
+		attrs = fixattrs(attrs)
+	
+		if hn(tag):
+			self.p()
+			if start: self.o(hn(tag)*"#" + ' ')
+
+		if tag in ['p', 'div']: self.p()
+		
+		if tag == "br" and start: self.o("  \n")
+
+		if tag in ["head", "style", 'script']: 
+			if start: self.quiet += 1
+			else: self.quiet -= 1
+		
+		if tag == "blockquote":
+			if start: 
+				self.p(); self.o('> ', 0, 1); self.start = 1
+				self.blockquote += 1
 			else:
-				self.text += text
+				self.blockquote -= 1
+				self.p()
+		
+		if tag in ['em', 'i', 'u']: self.o("_")
+		if tag in ['strong', 'b']: self.o("**")
+		if tag == "code" and not self.pre: self.o('`') #TODO: `` `this` ``
+		
+		if tag == "a":
+			if start:
+				attrs = dict(attrs)
+				if attrs.has_key('href'): 
+					self.astack.append(attrs)
+					self.o("[")
+				else:
+					self.astack.append(None)
+			else:
+				if self.astack:
+					a = self.astack.pop()
+					if a:
+						self.acount += 1
+						a['count'] = self.acount
+						a['outcount'] = self.outcount
+						self.o("][" + `a['count']` + "]")
+						self.a.append(a)
+		
+		if tag == "img" and start:
+			self.acount += 1
+			attrs = dict(attrs)
+			if attrs.has_key('src'):
+				attrs['href'] = attrs['src']
+				attrs['count'] = self.acount
+				attrs['outcount'] = self.outcount
+				self.a.append(attrs)
+				self.o("![")
+				if attrs.has_key('alt'): self.o(attrs['alt'])
+				self.o("]["+`self.acount`+"]")
+		
+		if tag in ["ol", "ul"]:
+			if start:
+				self.list.append({'name':tag, 'num':0})
+			else:
+				self.list.pop()
+			
+			self.p()
+		
+		if tag == 'li':
+			if start:
+				self.pbr()
+				if self.list: li = self.list[-1]
+				else: li = {'name':'ul', 'num':0}
+				self.o("  "*len(self.list)) #TODO: line up <ol><li>s > 9 correctly.
+				if li['name'] == "ul": self.o("* ")
+				elif li['name'] == "ol":
+					li['num'] += 1
+					self.o(`li['num']`+". ")
+				self.start = 1
+			else:
+				self.pbr()
+		
+		if tag in ['tr']: self.pbr()
+		
+		if tag == "pre":
+			if start:
+				self.startpre = 1
+				self.pre = 1
+			else:
+				self.pre = 0
+			self.p()
+			
+	def pbr(self):
+		if self.p_p == 0: self.p_p = 1
 
-	def dumpbuffer(self):
-		if self.p or self.br:
-			# we're going to add some newlines, so empty line buffer
-			self.text += self.line
+	def p(self): self.p_p = 2
+	
+	
+	def o(self, data, puredata=0, force=0):
+		if not self.quiet: 
+			if puredata and not self.pre:
+				data = re.sub('\s+', ' ', data)
+				if data and data[0] == ' ':
+					self.space = 1
+					data = data[1:]
+			if not data and not force: return
 			
-			if self.text != '': # not the first thing
-				if self.p:
-					self.text += "\n\n"
-				elif self.br:
-					self.text += "\n"
-			self.line = "    " * self.blockquote
-			self.p, self.br = 0, 0
+			if self.startpre:
+				out(" :") #TODO: not output when already one there
+				self.startpre = 0
 			
-html2text = _html2text()
+			bq = (">" * self.blockquote)
+			if not (force and data and data[0] == ">"): bq += (" "*bool(self.blockquote))
+			
+			if self.pre:
+				bq += "    "
+				data = data.replace("\n", "\n"+bq)
+			
+			if self.start:
+				self.space = 0
+				self.p_p = 0
+				self.start = 0
+
+			if force == 'end':
+				# It's the end.
+				self.p_p = 0
+				out("\n")
+				self.space = 0
+
+
+			if self.p_p:
+				out(('\n'+bq)*self.p_p)
+				self.space = 0
+				
+			if self.space:
+				if not self.lastWasNL: out(' ')
+				self.space = 0
+
+			if self.a and ((self.p_p == 2 and LINKS_EACH_PARAGRAPH) or force == "end"):
+				if force == "end": out("\n")
+
+				newa = []
+				for link in self.a:
+					if self.outcount > link['outcount']:
+						out("    ["+`link['count']`+"]: " + link['href']) #TODO: base href
+						if link.has_key('title'): out(" ("+link['title']+")")
+						out("\n")
+					else:
+						newa.append(link)
+
+				if self.a != newa: out("\n") # Don't need an extra line when nothing was done.
+
+				self.a = newa
+
+			self.p_p = 0
+			out(data)
+			self.lastWasNL = data and data[-1] == '\n'
+			self.outcount += 1
+
+	def handle_data(self, data):
+		self.o(data, 1)
+	
+	def unknown_decl(self, data): pass
+		
+def html2text(html):
+	h = _html2text()
+	h.feed(html)
+	h.feed("")
+	h.close()
 
 if __name__ == "__main__":
-	import cgitb; cgitb.enable()
-	import sys, urllib, cgi
-	if len(sys.argv) > 1:
-		url = sys.argv[1]
-	elif 'url' in cgi.FieldStorage().keys():
-		import cgitb; cgitb.enable();
-		url = cgi.FieldStorage()['url'].value
-		print "Content-type: text/plain; charset=utf-8"
-		print
-	else: 
-		print "Content-type: text/plain; charset=utf-8"
-		print
-		url = "http://www.aaronsw.com/"
-	maxlen=80
-	if 'maxlen' in cgi.FieldStorage().keys():
-		maxlen=cgi.FieldStorage()['maxlen'].value
-	print html2text(urllib.urlopen(url).read(), url, maxlen=maxlen).encode('utf-8')
+	if sys.argv[1:]:
+		arg = sys.argv[1]
+		if arg.startswith('http://'):
+			data = urllib.urlopen(arg).read()
+		else:
+			data = open(arg, 'r').read()
+	else:
+		data = sys.stdin.read()
+	html2text(data)
