@@ -1,14 +1,14 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.21"
+__version__ = "2.24"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
 
 # TODO:
 #   Support decoded entities with unifiable.
-#	Fix :s using buffering
 #	Relative URL resolution
 
+if not hasattr(__builtins__, 'True'): True, False = 1, 0
 import re, sys, urllib, htmlentitydefs, codecs, StringIO, types
 import sgmllib
 sgmllib.charref = re.compile('&#([xX]?[0-9a-fA-F]+)[^0-9a-fA-F]')
@@ -189,7 +189,7 @@ class _html2text(sgmllib.SGMLParser):
  			if a.has_key('href') and a['href'] == attrs['href']:
  				if a.has_key('title') or attrs.has_key('title'):
  						if (a.has_key('title') and attrs.has_key('title') and
- 						    a['title'] == attrs['title']):
+						    a['title'] == attrs['title']):
  							match = True
  				else:
  					match = True
@@ -271,6 +271,11 @@ class _html2text(sgmllib.SGMLParser):
 				self.o(alt)
 				self.o("]["+`attrs['count']`+"]")
 		
+		if tag == 'dl' and start: self.p()
+		if tag == 'dt' and not start: self.pbr()
+		if tag == 'dd' and start: self.o('    ')
+		if tag == 'dd' and not start: self.pbr()
+
 		if tag in ["ol", "ul"]:
 			if start:
 				self.list.append({'name':tag, 'num':0})
@@ -354,7 +359,7 @@ class _html2text(sgmllib.SGMLParser):
 				newa = []
 				for link in self.a:
 					if self.outcount > link['outcount']:
-						self.out("    ["+`link['count']`+"]: " + link['href']) #TODO: base href
+						self.out("   ["+`link['count']`+"]: " + link['href']) #TODO: base href
 						if link.has_key('title'): self.out(" ("+link['title']+")")
 						self.out("\n")
 					else:
@@ -393,3 +398,4 @@ if __name__ == "__main__":
 	else:
 		data = sys.stdin.read()
 	html2text_file(data)
+
