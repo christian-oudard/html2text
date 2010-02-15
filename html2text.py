@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.31"
+__version__ = "2.32"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -383,6 +383,7 @@ class _html2text(sgmllib.SGMLParser):
             self.outcount += 1
 
     def handle_data(self, data):
+        if r'\/script>' in data: self.quiet -= 1
         self.o(data, 1)
     
     def unknown_decl(self, data): pass
