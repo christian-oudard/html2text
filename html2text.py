@@ -1,9 +1,12 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.0, alpha"
+__version__ = "2.01, alpha"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
 
-# TODO: Word wrap.
+# TODO:
+#	Word wrap. 
+#	Buffering for, e.g., rss2email (fixes :s too). 
+#	Relative URl resolution
 
 import re, sys, urllib, htmlentitydefs
 import sgmllib
@@ -60,7 +63,7 @@ def entityref(c):
 		else: return unichr(name2cp(c)).encode('utf8')
 
 def replaceEntities(s):
-	s = s.group(0)
+	s = s.group(1)
 	if s[0] == "#": return charref(s[1:])
 	else: return entityref(s)
 
