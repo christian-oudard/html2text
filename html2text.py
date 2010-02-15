@@ -1,5 +1,5 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.01, alpha"
+__version__ = "2.1"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
 
@@ -8,7 +8,7 @@ __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
 #	Buffering for, e.g., rss2email (fixes :s too). 
 #	Relative URl resolution
 
-import re, sys, urllib, htmlentitydefs
+import re, sys, urllib, htmlentitydefs, StringIO
 import sgmllib
 sgmllib.charref = re.compile('&#([xX]?[0-9a-fA-F]+)[^0-9a-fA-F]')
 
@@ -31,7 +31,7 @@ def name2cp(k):
 
 unifiable = {'rsquo':"'", 'lsquo':"'", 'rdquo':'"', 'ldquo':'"', 
 'copy':'(C)', 'mdash':'--', 'nbsp':' ', 'rarr':'->', 'larr':'<-', 'middot':'*',
-'oelig':'oe', 'aelig':'ae', 
+'ndash':'-', 'oelig':'oe', 'aelig':'ae',
 'agrave':'a', 'aacute':'a', 'acirc':'a', 'atilde':'a', 'auml':'a', 'aring':'a', 
 'egrave':'e', 'eacute':'e', 'ecirc':'e', 'euml':'e', 
 'igrave':'i', 'iacute':'i', 'icirc':'i', 'iuml':'i',
@@ -52,7 +52,7 @@ def charref(name):
 	if not UNICODE_SNOB and c in unifiable_n.keys():
 		return unifiable_n[c]
 	else:
-		return unichr(c).encode('utf8')
+		return unichr(c)
 
 def entityref(c):
 	if not UNICODE_SNOB and c in unifiable.keys():
@@ -60,11 +60,12 @@ def entityref(c):
 	else:
 		try: name2cp(c)
 		except KeyError: return "&" + c
-		else: return unichr(name2cp(c)).encode('utf8')
+		else: return unichr(name2cp(c))
 
 def replaceEntities(s):
 	s = s.group(1)
-	if s[0] == "#": return charref(s[1:])
+	if s[0] == "#": 
+		return charref(s[1:])
 	else: return entityref(s)
 
 r_unescape = re.compile(r"&(#?[xX]?(?:[0-9a-fA-F]+|\w{1,8}));")
@@ -81,8 +82,6 @@ def fixattrs(attrs):
 
 ### End Entity Nonsense ###
 
-def out(text): sys.stdout.write(text)
-
 def hn(tag):
 	if tag[0] == 'h' and len(tag) == 2:
 		try:
@@ -91,9 +90,12 @@ def hn(tag):
 		except ValueError: return False
 
 class _html2text(sgmllib.SGMLParser):
-	def __init__(self):
+	def __init__(self, out=sys.stdout.write):
 		sgmllib.SGMLParser.__init__(self)
 		
+		if out is None: self.out = self.outtextf
+		else: self.out = out
+		self.outtext = u''
 		self.quiet = 0
 		self.p_p = 0
 		self.outcount = 0
@@ -108,11 +110,17 @@ class _html2text(sgmllib.SGMLParser):
 		self.startpre = 0
 		self.lastWasNL = 0
 	
+	def outtextf(self, s): 
+		if type(s) is str: s = s.decode('utf8')
+		self.outtext += s
+	
 	def close(self):
 		sgmllib.SGMLParser.close(self)
 		
 		self.pbr()
 		self.o('', 0, 'end')
+		
+		return self.outtext
 		
 	def handle_charref(self, c):
 		self.o(charref(c))
@@ -231,7 +239,7 @@ class _html2text(sgmllib.SGMLParser):
 			if not data and not force: return
 			
 			if self.startpre:
-				out(" :") #TODO: not output when already one there
+				self.out(" :") #TODO: not output when already one there
 				self.startpre = 0
 			
 			bq = (">" * self.blockquote)
@@ -249,36 +257,36 @@ class _html2text(sgmllib.SGMLParser):
 			if force == 'end':
 				# It's the end.
 				self.p_p = 0
-				out("\n")
+				self.out("\n")
 				self.space = 0
 
 
 			if self.p_p:
-				out(('\n'+bq)*self.p_p)
+				self.out(('\n'+bq)*self.p_p)
 				self.space = 0
 				
 			if self.space:
-				if not self.lastWasNL: out(' ')
+				if not self.lastWasNL: self.out(' ')
 				self.space = 0
 
 			if self.a and ((self.p_p == 2 and LINKS_EACH_PARAGRAPH) or force == "end"):
-				if force == "end": out("\n")
+				if force == "end": self.out("\n")
 
 				newa = []
 				for link in self.a:
 					if self.outcount > link['outcount']:
-						out("    ["+`link['count']`+"]: " + link['href']) #TODO: base href
-						if link.has_key('title'): out(" ("+link['title']+")")
-						out("\n")
+						self.out("    ["+`link['count']`+"]: " + link['href']) #TODO: base href
+						if link.has_key('title'): self.out(" ("+link['title']+")")
+						self.out("\n")
 					else:
 						newa.append(link)
 
-				if self.a != newa: out("\n") # Don't need an extra line when nothing was done.
+				if self.a != newa: self.out("\n") # Don't need an extra line when nothing was done.
 
 				self.a = newa
 
 			self.p_p = 0
-			out(data)
+			self.out(data)
 			self.lastWasNL = data and data[-1] == '\n'
 			self.outcount += 1
 
@@ -287,11 +295,14 @@ class _html2text(sgmllib.SGMLParser):
 	
 	def unknown_decl(self, data): pass
 		
-def html2text(html):
-	h = _html2text()
+def html2text_file(html, out=sys.stdout.write):
+	h = _html2text(out)
 	h.feed(html)
 	h.feed("")
-	h.close()
+	return h.close()
+
+def html2text(html):
+	return html2text_file(html, None)
 
 if __name__ == "__main__":
 	if sys.argv[1:]:
@@ -302,4 +313,4 @@ if __name__ == "__main__":
 			data = open(arg, 'r').read()
 	else:
 		data = sys.stdin.read()
-	html2text(data)
+	html2text_file(data)
