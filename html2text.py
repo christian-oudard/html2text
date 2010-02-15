@@ -1,7 +1,8 @@
+#!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.29"
+__version__ = "2.291"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
-__copyright__ = "(C) 2004-2007 Aaron Swartz. GNU GPL 2."
+__copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
 
 # TODO:
@@ -23,7 +24,7 @@ UNICODE_SNOB = 0
 LINKS_EACH_PARAGRAPH = 0
 
 # Wrap long lines at position. 0 for no wrapping. (Requires Python 2.3.)
-BODY_WIDTH = 0
+BODY_WIDTH = 78
 
 ### Entity Nonsense ###
 
@@ -406,11 +407,11 @@ if __name__ == "__main__":
 			text = j.read()
 			encoding = enc(j.headers, text)[0]
 			if encoding == 'us-ascii': encoding = 'utf-8'
-			data = html2text_file(text.decode(encoding))
+			data = text.decode(encoding)
 
 		else:
 			data = open(arg, 'r').read()
 	else:
 		data = sys.stdin.read()
-	html2text_file(data)
+	wrapwrite(html2text(data))
 
