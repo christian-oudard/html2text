@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.34"
+__version__ = "2.35"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -112,7 +112,9 @@ def optwrap(text):
     for para in text.split("\n"):
         if len(para) > 0:
             if para[0] is not ' ' and para[0] is not '-' and para[0] is not '*':
-                result += "\n".join(wrap(para, BODY_WIDTH)) + "\n"
+                for line in wrap(para, BODY_WIDTH):
+                    result += line + "\n"
+                result += "\n"
                 newlines = 2
             else:
                 if not onlywhite(para):
