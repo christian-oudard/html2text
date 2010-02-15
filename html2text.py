@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.35"
+__version__ = "2.36"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
-__contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
+__contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes", "Kevin Jay North"]
 
 # TODO:
 #   Support decoded entities with unifiable.
-#   Relative URL resolution
 
 if not hasattr(__builtins__, 'True'): True, False = 1, 0
 import re, sys, urllib, htmlentitydefs, codecs, StringIO, types
 import sgmllib
+import urlparse
 sgmllib.charref = re.compile('&#([xX]?[0-9a-fA-F]+)[^0-9a-fA-F]')
 
 try: from textwrap import wrap
@@ -134,7 +134,7 @@ def hn(tag):
         except ValueError: return 0
 
 class _html2text(sgmllib.SGMLParser):
-    def __init__(self, out=sys.stdout.write):
+    def __init__(self, out=sys.stdout.write, baseurl=''):
         sgmllib.SGMLParser.__init__(self)
         
         if out is None: self.out = self.outtextf
@@ -156,6 +156,7 @@ class _html2text(sgmllib.SGMLParser):
         self.abbr_title = None # current abbreviation definition
         self.abbr_data = None # last inner HTML (for abbr being defined)
         self.abbr_list = {} # stack of abbreviations to write later
+        self.baseurl = baseurl
     
     def outtextf(self, s): 
         self.outtext += s
@@ -387,7 +388,7 @@ class _html2text(sgmllib.SGMLParser):
                 newa = []
                 for link in self.a:
                     if self.outcount > link['outcount']:
-                        self.out("   ["+`link['count']`+"]: " + link['href']) #TODO: base href
+                        self.out("   ["+`link['count']`+"]: " + urlparse.urljoin(self.baseurl, link['href'])) 
                         if link.has_key('title'): self.out(" ("+link['title']+")")
                         self.out("\n")
                     else:
@@ -414,20 +415,22 @@ class _html2text(sgmllib.SGMLParser):
 
 def wrapwrite(text): sys.stdout.write(text.encode('utf8'))
 
-def html2text_file(html, out=wrapwrite):
-    h = _html2text(out)
+def html2text_file(html, out=wrapwrite, baseurl=''):
+    h = _html2text(out, baseurl)
     h.feed(html)
     h.feed("")
     return h.close()
 
-def html2text(html):
-    return optwrap(html2text_file(html, None))
+def html2text(html, baseurl=''):
+    return optwrap(html2text_file(html, None, baseurl))
 
 if __name__ == "__main__":
+    baseurl = ''
     if sys.argv[1:]:
         arg = sys.argv[1]
         if arg.startswith('http://'):
-            j = urllib.urlopen(arg)
+            baseurl = arg
+            j = urllib.urlopen(baseurl)
             try:
                 from feedparser import _getCharacterEncoding as enc
             except ImportError:
@@ -444,5 +447,5 @@ if __name__ == "__main__":
             data = open(arg, 'r').read().decode(encoding)
     else:
         data = sys.stdin.read().decode('utf8')
-    wrapwrite(html2text(data))
+    wrapwrite(html2text(data, baseurl))
 
