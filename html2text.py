@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.36"
+__version__ = "2.37"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes", "Kevin Jay North"]
@@ -134,7 +134,7 @@ def hn(tag):
         except ValueError: return 0
 
 class _html2text(sgmllib.SGMLParser):
-    def __init__(self, out=sys.stdout.write, baseurl=''):
+    def __init__(self, out=None, baseurl=''):
         sgmllib.SGMLParser.__init__(self)
         
         if out is None: self.out = self.outtextf
