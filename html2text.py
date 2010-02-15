@@ -1,14 +1,13 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.2"
+__version__ = "2.21"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
-__contributors__ = ["Martin 'Joey' Schulze"]
+__contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
 
 # TODO:
 #   Support decoded entities with unifiable.
-#	Word wrap. 
 #	Fix :s using buffering
-#	Relative URl resolution
+#	Relative URL resolution
 
 import re, sys, urllib, htmlentitydefs, codecs, StringIO, types
 import sgmllib
@@ -276,7 +275,7 @@ class _html2text(sgmllib.SGMLParser):
 			if start:
 				self.list.append({'name':tag, 'num':0})
 			else:
-				self.list.pop()
+				if self.list: self.list.pop()
 			
 			self.p()
 		
@@ -309,7 +308,6 @@ class _html2text(sgmllib.SGMLParser):
 
 	def p(self): self.p_p = 2
 	
-	
 	def o(self, data, puredata=0, force=0):
 		if not self.quiet: 
 			if puredata and not self.pre:
@@ -320,7 +318,7 @@ class _html2text(sgmllib.SGMLParser):
 			if not data and not force: return
 			
 			if self.startpre:
-				self.out(" :") #TODO: not output when already one there
+				#self.out(" :") #TODO: not output when already one there
 				self.startpre = 0
 			
 			bq = (">" * self.blockquote)
