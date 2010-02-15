@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.32"
+__version__ = "2.33"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -153,6 +153,9 @@ class _html2text(sgmllib.SGMLParser):
         self.pre = 0
         self.startpre = 0
         self.lastWasNL = 0
+        self.abbr_title = None # current abbreviation definition
+        self.abbr_data = None # last inner HTML (for abbr being defined)
+        self.abbr_list = {} # stack of abbreviations to write later
     
     def outtextf(self, s): 
         self.outtext += s
@@ -234,6 +237,21 @@ class _html2text(sgmllib.SGMLParser):
         if tag in ['em', 'i', 'u']: self.o("_")
         if tag in ['strong', 'b']: self.o("**")
         if tag == "code" and not self.pre: self.o('`') #TODO: `` `this` ``
+        if tag == "abbr":
+            if start:
+                attrsD = {}
+                for (x, y) in attrs: attrsD[x] = y
+                attrs = attrsD
+                
+                self.abbr_title = None
+                self.abbr_data = ''
+                if attrs.has_key('title'):
+                    self.abbr_title = attrs['title']
+            else:
+                if self.abbr_title != None:
+                    self.abbr_list[self.abbr_data] = self.abbr_title
+                    self.abbr_title = None
+                self.abbr_data = ''
         
         if tag == "a":
             if start:
@@ -322,6 +340,8 @@ class _html2text(sgmllib.SGMLParser):
     def p(self): self.p_p = 2
     
     def o(self, data, puredata=0, force=0):
+        if self.abbr_data is not None: self.abbr_data += data
+        
         if not self.quiet: 
             if puredata and not self.pre:
                 data = re.sub('\s+', ' ', data)
@@ -376,6 +396,10 @@ class _html2text(sgmllib.SGMLParser):
                 if self.a != newa: self.out("\n") # Don't need an extra line when nothing was done.
 
                 self.a = newa
+            
+            if self.abbr_list and force == "end":
+                for abbr, definition in self.abbr_list.items():
+                    self.out("  *[" + abbr + "]: " + definition + "\n")
 
             self.p_p = 0
             self.out(data)
