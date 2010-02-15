@@ -1,5 +1,5 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.24"
+__version__ = "2.25"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -378,8 +378,10 @@ class _html2text(sgmllib.SGMLParser):
 		self.o(data, 1)
 	
 	def unknown_decl(self, data): pass
-		
-def html2text_file(html, out=sys.stdout.write):
+
+def wrapwrite(text): sys.stdout.write(text.encode('utf8'))
+
+def html2text_file(html, out=wrapwrite):
 	h = _html2text(out)
 	h.feed(html)
 	h.feed("")
