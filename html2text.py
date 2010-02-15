@@ -1,5 +1,5 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.28"
+__version__ = "2.29"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2007 Aaron Swartz. GNU GPL 2."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -215,6 +215,9 @@ class _html2text(sgmllib.SGMLParser):
 		if tag in ["head", "style", 'script']: 
 			if start: self.quiet += 1
 			else: self.quiet -= 1
+
+		if tag in ["body"]:
+		    self.quiet = 0 # sites like 9rules.com never close <head>
 		
 		if tag == "blockquote":
 			if start: 
@@ -399,7 +402,7 @@ if __name__ == "__main__":
 			try:
 				from feedparser import _getCharacterEncoding as enc
 			except ImportError:
-			       enc = lambda x, y: y, x
+			       enc = lambda x, y: ('utf-8', 1)
 			text = j.read()
 			encoding = enc(j.headers, text)[0]
 			if encoding == 'us-ascii': encoding = 'utf-8'
