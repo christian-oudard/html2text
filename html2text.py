@@ -1,5 +1,5 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.26"
+__version__ = "2.27"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2007 Aaron Swartz. GNU GPL 2."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
