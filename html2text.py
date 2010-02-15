@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.291"
+__version__ = "2.292"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -25,6 +25,10 @@ LINKS_EACH_PARAGRAPH = 0
 
 # Wrap long lines at position. 0 for no wrapping. (Requires Python 2.3.)
 BODY_WIDTH = 78
+
+# Don't show internal links (href="#local-anchor") -- corresponding link targets
+# won't be visible in the plain text file anyway.
+SKIP_INTERNAL_LINKS = False
 
 ### Entity Nonsense ###
 
@@ -237,7 +241,7 @@ class _html2text(sgmllib.SGMLParser):
 				attrsD = {}
 				for (x, y) in attrs: attrsD[x] = y
 				attrs = attrsD
-				if attrs.has_key('href'): 
+				if attrs.has_key('href') and not (SKIP_INTERNAL_LINKS and attrs['href'].startswith('#')): 
 					self.astack.append(attrs)
 					self.o("[")
 				else:
