@@ -1,7 +1,7 @@
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.25"
+__version__ = "2.26"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
-__copyright__ = "(C) 2004 Aaron Swartz. GNU GPL 2."
+__copyright__ = "(C) 2004-2007 Aaron Swartz. GNU GPL 2."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
 
 # TODO:
@@ -394,7 +394,16 @@ if __name__ == "__main__":
 	if sys.argv[1:]:
 		arg = sys.argv[1]
 		if arg.startswith('http://'):
-			data = urllib.urlopen(arg).read()
+			j = urllib.urlopen(arg)
+			try:
+				from feedparser import _getCharacterEncoding as enc
+			except ImportError:
+			       enc = lambda x, y: y, x
+			text = j.read()
+			encoding = enc(j.headers, text)[0]
+			if encoding == 'us-ascii': encoding = 'utf-8'
+			data = html2text_file(text.decode(encoding))
+
 		else:
 			data = open(arg, 'r').read()
 	else:
