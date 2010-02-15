@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """html2text: Turn HTML into equivalent Markdown-structured text."""
-__version__ = "2.3"
+__version__ = "2.31"
 __author__ = "Aaron Swartz (me@aaronsw.com)"
 __copyright__ = "(C) 2004-2008 Aaron Swartz. GNU GPL 3."
 __contributors__ = ["Martin 'Joey' Schulze", "Ricardo Reyes"]
@@ -155,7 +155,6 @@ class _html2text(sgmllib.SGMLParser):
         self.lastWasNL = 0
     
     def outtextf(self, s): 
-        if type(s) is type(''): s = codecs.utf_8_decode(s)[0]
         self.outtext += s
     
     def close(self):
@@ -414,8 +413,11 @@ if __name__ == "__main__":
             data = text.decode(encoding)
 
         else:
-            data = open(arg, 'r').read()
+            encoding = 'utf8'
+            if len(sys.argv) > 2:
+                encoding = sys.argv[2]
+            data = open(arg, 'r').read().decode(encoding)
     else:
-        data = sys.stdin.read()
+        data = sys.stdin.read().decode('utf8')
     wrapwrite(html2text(data))
 
